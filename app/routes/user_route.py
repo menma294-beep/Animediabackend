@@ -1,34 +1,72 @@
-from fastapi import APIRouter
-from app.controllers.user_controller import create_user, get_all_users,create_friendship,get_user_friends
-from app.schemas.user_schema import UserCreate, UserResponse
-from typing import List
-from app.schemas.user_schema import FriendshipRequest
-router = APIRouter(prefix="/users")
+from fastapi import APIRouter, HTTPException, Depends
+from app.controllers.user_controller import get_user_by_id, get_all_users, update_user, delete_user
+from app.schemas.user_schema import UserResponse, UserCreate
+from app.auth import get_current_user
+from app.services.neo4j_service import get_driver 
+router = APIRouter(prefix="/users", tags=["Users login and sign up"])
+active_users = set()
 
-@router.post("/", response_model=UserResponse)
-def add_user(user: UserCreate):
-    new_user = create_user(user.username, user.email)
-    return {
-        "id": new_user["id"],
-        "username": new_user["username"],
-        "email": new_user["email"]
-    }
-@router.get("/", response_model=List[UserResponse])
-def list_users():
-    users = get_all_users()
-    return [{"id": u["id"], "username": u["username"], "email": u["email"]} for u in users]
+@router.post("/online")
+def mark_online(current_user: str = Depends(get_current_user)):
+    """Mark a user as online."""
+    active_users.add(current_user)
+    print(f"✅ User {current_user} is now online")
+    return {"status": "online"}
 
-@router.post("/friends")
-def add_friendship(request: FriendshipRequest):
-    result = create_friendship(request.user_id, request.friend_id)
-    if not result:
-        return {"error": "Users not found"}
-    return {
-        "user": result["user"]["username"],
-        "friend": result["friend"]["username"]
-    }
-    
-@router.get("/{user_id}/friends", response_model=List[UserResponse])
-def list_friends(user_id: str):
-    friends = get_user_friends(user_id)
-    return [{"id": f["id"], "username": f["username"], "email": f["email"]} for f in friends]
+@router.delete("/online")
+def mark_offline(current_user: str = Depends(get_current_user)):
+    """Mark a user as offline."""
+    active_users.discard(current_user)
+    print(f"❌ User {current_user} went offline")
+    return {"status": "offline"}
+
+# make sure this import exists
+
+@router.get("/active")
+def get_active_users():
+    """Return currently active users (with username)."""
+    print(f"📡 Active users: {active_users}")
+
+    if not active_users:
+        return []
+
+    driver = get_driver()
+    query = """
+    MATCH (u:User)
+    WHERE u.id IN $ids
+    RETURN u.id AS id, u.username AS username
+    """
+    with driver.session() as session:
+        result = session.run(query, ids=list(active_users))
+        users = [record.data() for record in result]
+
+    print("🟢 Sending active users:", users)
+    return users
+
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+def read_user(user_id: str):
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.get("/", response_model=list[UserResponse])
+def read_users():
+    return get_all_users()
+
+@router.put("/{user_id}", response_model=UserResponse)
+def update_user_route(user_id: str, payload: UserCreate):
+    user = update_user(user_id, payload.username, payload.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.delete("/{user_id}")
+def delete_user_route(user_id: str):
+    success = delete_user(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"detail": "User deleted"}
+

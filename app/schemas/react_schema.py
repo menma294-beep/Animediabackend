@@ -1,16 +1,15 @@
 from pydantic import BaseModel
-from datetime import datetime
+from typing import Optional
 
 class ReactCreate(BaseModel):
-    user_id: str
-    target_id: str   # could be a Post or Comment
-    type: str        # e.g., "like", "love", "haha"
+    target_id: str
+    react_type: str
 
 class ReactResponse(BaseModel):
-    id: str
-    type: str
-    created_at: datetime
-    user_id: str
-    username: str
-    target_id: str
-    target_type: str
+    id: Optional[str]
+    type: Optional[str] = None
+    created_at: Optional[str] = None
+    user_id: Optional[str] = None
+    user_username: Optional[str] = None
+    target_id: Optional[str] = None
+    is_active: Optional[bool] = True

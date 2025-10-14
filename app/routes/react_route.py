@@ -1,35 +1,29 @@
-from fastapi import APIRouter
-from app.controllers.react_controller import create_react, get_reacts_for_target
+from fastapi import APIRouter, Depends
 from app.schemas.react_schema import ReactCreate, ReactResponse
-from typing import List
+from app.controllers.react_controller import create_react, get_reactors_for_post, set_react_inactive
+from app.auth import get_current_user
 
-router = APIRouter(prefix="/reacts")
+router = APIRouter(prefix="/reacts", tags=["Reacts"])
 
 @router.post("/", response_model=ReactResponse)
-def add_react(react: ReactCreate):
-    result = create_react(react.user_id, react.target_id, react.type)
-    return {
-        "id": result["react"]["id"],
-        "type": result["react"]["type"],
-        "created_at": result["react"]["created_at"],
-        "user_id": result["user"]["id"],
-        "username": result["user"]["username"],
-        "target_id": result["target"]["id"],
-        "target_type": list(result["target"].labels)[0]  # "Post" or "Comment"
-    }
+def add_react(
+    react: ReactCreate,
+    current_user: str = Depends(get_current_user)
+):
+    return create_react(user_id=current_user, target_id=react.target_id, react_type=react.react_type)
 
-@router.get("/target/{target_id}", response_model=List[ReactResponse])
-def list_reacts(target_id: str):
-    results = get_reacts_for_target(target_id)
-    return [
-        {
-            "id": r["react"]["id"],
-            "type": r["react"]["type"],
-            "created_at": r["react"]["created_at"],
-            "user_id": r["user"]["id"],
-            "username": r["user"]["username"],
-            "target_id": r["target"]["id"],
-            "target_type": list(r["target"].labels)[0]
-        }
-        for r in results
-    ]
+
+@router.post("/unlike", response_model=ReactResponse)
+def unlike_react(
+    react: ReactCreate,
+    current_user: str = Depends(get_current_user)
+):
+    return set_react_inactive(user_id=current_user, target_id=react.target_id)
+
+
+@router.get("/post/{post_id}")
+def list_post_reacts(
+    post_id: str,
+    current_user: str = Depends(get_current_user)
+):
+    return get_reactors_for_post(post_id, current_user)

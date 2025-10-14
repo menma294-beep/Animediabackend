@@ -2,7 +2,6 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class CommentCreate(BaseModel):
-    user_id: str
     post_id: str
     content: str
 

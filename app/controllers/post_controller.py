@@ -1,39 +1,70 @@
+import uuid
+from datetime import datetime
 from app.services.neo4j_service import get_driver
-import uuid, datetime
-
-def create_post(user_id: str, content: str):
-    driver = get_driver()
-    post_id = str(uuid.uuid4())
-    created_at = datetime.datetime.utcnow().isoformat()
-
+from app.services.neo4j_service import run_query
+def create_post(content: str, user_id: str):
     query = """
     MATCH (u:User {id: $user_id})
-    CREATE (p:Post {id: $post_id, content: $content, created_at: $created_at})
-    MERGE (u)-[:AUTHORED]->(p)
-    RETURN p, u
+    CREATE (p:Post {
+        id: randomUUID(),
+        content: $content,
+        created_at: datetime()
+    })
+    CREATE (u)-[:AUTHORED]->(p)
+    RETURN p AS post, u AS user
     """
-    with driver.session() as session:
-        result = session.run(query, user_id=user_id, post_id=post_id, content=content, created_at=created_at)
-        record = result.single()
-        return {"post": record["p"], "user": record["u"]}
+    record = run_query(query, {"content": content, "user_id": user_id}, single=True)
 
+    if not record:
+        return None
+
+    return {
+        "post": {
+            "id": record["post"]["id"],
+            "content": record["post"]["content"],
+            "created_at": str(record["post"]["created_at"]),
+        },
+        "user": {
+            "id": record["user"]["id"],
+            "username": record["user"]["username"],
+        }
+    }
 def get_all_posts():
     driver = get_driver()
     query = """
     MATCH (u:User)-[:AUTHORED]->(p:Post)
-    RETURN p, u
+    RETURN p AS post, u AS user
     ORDER BY p.created_at DESC
     """
     with driver.session() as session:
-        result = session.run(query)
-        return [{"post": record["p"], "user": record["u"]} for record in result]
+        results = session.run(query)
+        return [
+            {
+                "id": r["post"]["id"],
+                "content": r["post"]["content"],
+                "created_at": r["post"]["created_at"],
+                "author_id": r["user"]["id"],
+                "author_username": r["user"]["username"]
+            }
+            for r in results
+        ]
+
 def get_posts_by_user(user_id: str):
     driver = get_driver()
     query = """
     MATCH (u:User {id: $user_id})-[:AUTHORED]->(p:Post)
-    RETURN p, u
+    RETURN p AS post, u AS user
     ORDER BY p.created_at DESC
     """
     with driver.session() as session:
-        result = session.run(query, user_id=user_id)
-        return [{"post": record["p"], "user": record["u"]} for record in result]
+        results = session.run(query, user_id=user_id)
+        return [
+            {
+                "id": r["post"]["id"],
+                "content": r["post"]["content"],
+                "created_at": r["post"]["created_at"],
+                "author_id": r["user"]["id"],
+                "author_username": r["user"]["username"]
+            }
+            for r in results
+        ]
