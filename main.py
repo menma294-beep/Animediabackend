@@ -1,10 +1,14 @@
 from fastapi import FastAPI
-from app.routes import user_route, post_route,comment_route, react_route, auth_route,follow_route,notification_route
+from app.routes import user_route, post_route,comment_route, react_route, auth_route,follow_route,notification_route, bio_route, profilepicture_route
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI()
 
 app.include_router(user_route.router)
+app.include_router(profilepicture_route.router)
+app.include_router(bio_route.router)
 app.include_router(post_route.router)
 app.include_router(comment_route.router)
 app.include_router(react_route.router)
