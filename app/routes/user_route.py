@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.controllers.user_controller import get_user_by_id, get_all_users, update_user, delete_user
+from app.controllers.user_controller import get_user_by_id, delete_user
 from app.schemas.user_schema import UserResponse, UserCreate
 from app.auth import get_current_user
+from fastapi import APIRouter, HTTPException, Query
+from app.controllers.user_controller import search_users_controller, test_connection_controller
 from app.services.neo4j_service import get_driver 
+from fastapi import APIRouter, Query, HTTPException
+# make sure this points to your driver setup
+
 router = APIRouter(prefix="/users", tags=["Users login and sign up"])
 active_users = set()
 
@@ -52,16 +57,8 @@ def read_user(user_id: str):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.get("/", response_model=list[UserResponse])
-def read_users():
-    return get_all_users()
 
-@router.put("/{user_id}", response_model=UserResponse)
-def update_user_route(user_id: str, payload: UserCreate):
-    user = update_user(user_id, payload.username, payload.email)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+
 
 @router.delete("/{user_id}")
 def delete_user_route(user_id: str):
@@ -70,3 +67,34 @@ def delete_user_route(user_id: str):
         raise HTTPException(status_code=404, detail="User not found")
     return {"detail": "User deleted"}
 
+
+
+
+router = APIRouter(prefix="/users", tags=["Users"])
+
+@router.get("/search")
+def search_users(query: str = Query(..., description="Search for users by username")):
+    driver = get_driver()
+    cypher = """
+    MATCH (u:User)
+    WHERE u.username =~ $pattern
+    RETURN u.id AS id, u.username AS username, u.email AS email
+    ORDER BY u.username
+    LIMIT 20
+    """
+    pattern = f"(?i).*{query}.*"  # case-insensitive regex
+
+    print("🔍 Using pattern:", pattern)
+
+    try:
+        with driver.session() as session:
+            result = session.run(cypher, {"pattern": pattern})
+            users = [record.data() for record in result]
+
+        if not users:
+            raise HTTPException(status_code=404, detail="No users found")
+
+        return users
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
